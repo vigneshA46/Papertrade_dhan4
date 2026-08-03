@@ -131,7 +131,7 @@ HEADERS = {
 IST = pytz.timezone("Asia/Kolkata")
 
 TRADE_START = dtime(9, 16)
-TRADE_END   = dtime(15, 20)
+TRADE_END   = dtime(15, 14)
 
 TARGET_POINTS = 35
 LOTSIZE = 65

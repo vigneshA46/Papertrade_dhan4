@@ -54,7 +54,7 @@ DHAN_OPTION_CHAIN_URL = "https://api.dhan.co/v2/optionchain"
 
 
 TRADE_START = dtime(9, 16)
-TRADE_END   = dtime(15, 20)
+TRADE_END   = dtime(15, 14)
 
 TARGET_POINTS = 100
 CE_TARGET_POINTS = 100

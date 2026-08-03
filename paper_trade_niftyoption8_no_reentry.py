@@ -50,7 +50,7 @@ access_token = get_access_token()
 IST = pytz.timezone("Asia/Kolkata")
 
 TRADE_START = dtime(9, 16)
-TRADE_END   = dtime(15, 20)
+TRADE_END   = dtime(15, 14)
 
 CE_TARGET_POINTS = 8
 TARGET_POINTS = 8
