@@ -190,6 +190,11 @@ def build_payload(name, side, token , reason,event_type,ltp,pnl,cum_pnl,lot,user
 
     expiry_date = get_next_expiry()
 
+    expiry_date = get_next_expiry()
+
+    if isinstance(expiry_date, str):
+        expiry_date = datetime.strptime(expiry_date,"%Y-%m-%d")
+
     day = expiry_date.strftime("%d")
     month = expiry_date.strftime("%b").upper()
     year = expiry_date.strftime("%y")
