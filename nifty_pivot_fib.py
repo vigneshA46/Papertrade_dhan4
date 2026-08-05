@@ -1172,6 +1172,7 @@ def on_message(msg):
 # =========================
 
 wait_for_start()
+threading.Thread(target=trade_log_worker, daemon=True).start()
 
 next_expiry = get_next_expiry()
 
