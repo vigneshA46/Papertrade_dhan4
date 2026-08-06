@@ -852,7 +852,9 @@ def is_target_distance_valid(state, entry_price):
         f"Distance={distance:.2f}"
     )
 
-    return distance >= MIN_TARGET_DISTANCEdef reset_trade_state(state):
+    return distance >= MIN_TARGET_DISTANCE
+    
+def reset_trade_state(state):
     """
     Clears strategy state after exit.
     """
