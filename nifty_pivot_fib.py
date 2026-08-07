@@ -35,7 +35,6 @@ def trade_log_worker():
         finally:
             trade_log_queue.task_done()
 
-MIN_TARGET_DISTANCE = 15
 
 ATM = None 
 TRADE_LOG_URL = "https://algoapi.dreamintraders.in/api/paperlogger/event"
@@ -43,7 +42,7 @@ EVENT_LOG_URL = "https://algoapi.dreamintraders.in/api/paperlogger/paperlogger"
 
 COMMON_ID = "3ff84201-7e4d-4e8d-8308-8241b1bca093"
 SYMBOL = "NIFTY"
-OPTION_SELECTION_LTP = 130
+OPTION_SELECTION_LTP = 90
 
 MARKET_OPEN = dtime(9, 15)
 MARKET_CLOSE = dtime(15, 14)
@@ -189,7 +188,7 @@ def build_payload(name, side, token , reason,event_type,ltp,pnl,cum_pnl,lot,user
     else:
         row = AngelPE
 
-    expiry_date = get_next_expiry()
+    expiry_date = ce_row["SM_EXPIRY_DATE"]
 
     day = expiry_date.strftime("%d")
     month = expiry_date.strftime("%b").upper()
@@ -833,27 +832,6 @@ def get_next_fibonacci_target(state, entry_price):
 
     return state["r3"]
 
-def is_target_distance_valid(state, entry_price):
-    """
-    Returns True if the next Fibonacci target is
-    at least MIN_TARGET_DISTANCE points away.
-    """
-
-    target = get_next_fibonacci_target(state, entry_price)
-
-    if target is None:
-        return False
-
-    distance = target - entry_price
-
-    print(
-        f"Entry={entry_price:.2f}  "
-        f"Target={target:.2f}  "
-        f"Distance={distance:.2f}"
-    )
-
-    return distance >= MIN_TARGET_DISTANCE
-    
 def reset_trade_state(state):
     """
     Clears strategy state after exit.
@@ -891,8 +869,6 @@ def check_breakout(state, candle , leg = "CE"):
 
 
 def check_exit(state, ltp , leg = "CE"):
-
-    global combined_pnl , ce_state , pe_state ,  ce_strike , pe_strike 
 
     token = CE_ID if leg == "CE" else PE_ID
 
@@ -943,10 +919,9 @@ def check_exit(state, ltp , leg = "CE"):
         return "TARGET"
 
 
-    if ltp <= state["entry_price"] - 2:
+    if ltp <= state["entry_price"] - 5:
 
         print("🛑 Stoploss Hit")
-        print("SL HIT IN 2 POINTS")
         reset_trade_state(state)
         deployments = get_today_deployments()
         users = group_users_by_broker(deployments)
@@ -989,9 +964,11 @@ def check_exit(state, ltp , leg = "CE"):
     return None
 
 def check_retest_entry(state, ltp , leg = "CE"):
-
+    
 
     token = CE_ID if leg == "CE" else PE_ID
+
+    
 
 
     if state["position"]:
@@ -1015,23 +992,6 @@ def check_retest_entry(state, ltp , leg = "CE"):
 
     if crossed_up or crossed_down:
 
-        # -----------------------------
-        # Target Distance Filter
-        # -----------------------------
-        if not is_target_distance_valid(state, ltp):
-
-            print(
-                f"❌ {leg} Entry Skipped "
-                f"(Target distance < {MIN_TARGET_DISTANCE} points)"
-            )
-
-            state["waiting_retest"] = False
-            state["last_ltp"] = ltp
-            return False
-
-        # -----------------------------
-        # Valid Entry
-        # -----------------------------
         state["position"] = True
         state["waiting_retest"] = False
 
@@ -1041,12 +1001,13 @@ def check_retest_entry(state, ltp , leg = "CE"):
             state,
             ltp
         )
+
         print("\n========== ENTRY ==========")
         print(f"Price  : {ltp:.2f}")
         print(f"EMA    : {ema:.2f}")
         print(f"Target : {state['target']:.2f}")
         print("===========================\n")
-
+        print("token", token)
         state["last_ltp"] = ltp
 
         
@@ -1227,11 +1188,13 @@ print("PE Strike      :", pe_strike)
 print("PE Security ID :", pe_security_id)
 
 finder = FindInstrument()
-today_date = datetime.now().date()
+
+today_date = datetime.now(IST).strftime("%Y-%m-%d")
 
 
 
-#ce_row = find_option_security(fno_df, str(ce_strike), "CE", today_date, "NIFTY")
+
+ce_row = find_option_security(fno_df, ce_strike, "CE", today_date, "NIFTY")
 #pe_row = find_option_security(fno_df, str(pe_strike), "PE", today_date, "NIFTY")
 
 
