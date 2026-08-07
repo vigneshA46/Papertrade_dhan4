@@ -8,7 +8,7 @@ import os
 from dhanhq import MarketFeed
 from dhanhq import DhanContext, dhanhq
 from dhan_token import get_access_token
-from candle_builder import FiveMinuteCandleBuilder
+from candle_builder import FiveMinuteCandleBuilder , OneMinuteCandleBuilder
 from find_security import load_fno_master, find_option_security
 import threading
 from dispatcher import subscribe
@@ -45,7 +45,7 @@ SYMBOL = "NIFTY"
 OPTION_SELECTION_LTP = 90
 
 MARKET_OPEN = dtime(9, 15)
-MARKET_CLOSE = dtime(15, 30)
+MARKET_CLOSE = dtime(15, 14)
 
 CE_ID = None
 PE_ID = None
@@ -64,7 +64,7 @@ PE_TARGET_POINTS = 50
 IST = pytz.timezone("Asia/Kolkata")
 
 TRADE_START = dtime(9, 20)
-TRADE_END   = dtime(15, 20)
+TRADE_END   = dtime(15, 14)
 
 TARGET_POINTS = 50
 LOTSIZE = 65
@@ -188,7 +188,7 @@ def build_payload(name, side, token , reason,event_type,ltp,pnl,cum_pnl,lot,user
     else:
         row = AngelPE
 
-    expiry_date = get_next_expiry()
+    expiry_date = ce_row["SM_EXPIRY_DATE"]
 
     day = expiry_date.strftime("%d")
     month = expiry_date.strftime("%b").upper()
@@ -464,7 +464,7 @@ def load_history(security_id, candle_count=10):
 
     start_time, end_time = get_market_history_window(
         candle_count=candle_count,
-        interval=5
+        interval=1
     )
 
     print("\n========== HISTORY WINDOW ==========")
@@ -478,7 +478,7 @@ def load_history(security_id, candle_count=10):
         instrument_type="OPTIDX",
         from_date=start_time.strftime("%Y-%m-%d %H:%M:%S"),
         to_date=end_time.strftime("%Y-%m-%d %H:%M:%S"),
-        interval=5
+        interval=1
     )
 
     raw = data.get("data", {})
@@ -663,7 +663,7 @@ def get_last_market_time():
     # After market closes
     return market_close
 
-def get_market_history_window(candle_count=10, interval=5):
+def get_market_history_window(candle_count=10, interval=1):
     """
     Returns the history window required
     to fetch the last completed market candles.
@@ -706,7 +706,7 @@ def get_previous_day_ohlc(security_id):
         instrument_type="OPTIDX",
         from_date=start.strftime("%Y-%m-%d %H:%M:%S"),
         to_date=end.strftime("%Y-%m-%d %H:%M:%S"),
-        interval=5
+        interval=1
     )
 
     if data.get("status") != "success":
@@ -964,9 +964,11 @@ def check_exit(state, ltp , leg = "CE"):
     return None
 
 def check_retest_entry(state, ltp , leg = "CE"):
-
+    
 
     token = CE_ID if leg == "CE" else PE_ID
+
+    
 
 
     if state["position"]:
@@ -1005,7 +1007,7 @@ def check_retest_entry(state, ltp , leg = "CE"):
         print(f"EMA    : {ema:.2f}")
         print(f"Target : {state['target']:.2f}")
         print("===========================\n")
-
+        print("token", token)
         state["last_ltp"] = ltp
 
         
@@ -1186,11 +1188,13 @@ print("PE Strike      :", pe_strike)
 print("PE Security ID :", pe_security_id)
 
 finder = FindInstrument()
-today_date = datetime.now().date()
+
+today_date = datetime.now(IST).strftime("%Y-%m-%d")
 
 
 
-#ce_row = find_option_security(fno_df, str(ce_strike), "CE", today_date, "NIFTY")
+
+ce_row = find_option_security(fno_df, ce_strike, "CE", today_date, "NIFTY")
 #pe_row = find_option_security(fno_df, str(pe_strike), "PE", today_date, "NIFTY")
 
 
@@ -1206,8 +1210,8 @@ ce_state = init_state()
 pe_state = init_state()
 
 builders = {
-    CE_ID: FiveMinuteCandleBuilder(),
-    PE_ID: FiveMinuteCandleBuilder()
+    CE_ID: OneMinuteCandleBuilder(),
+    PE_ID: OneMinuteCandleBuilder()
 }
 
 
