@@ -962,14 +962,9 @@ def check_exit(state, ltp , leg = "CE"):
         return "SL"
 
     return None
-
-def check_retest_entry(state, ltp , leg = "CE"):
-    
+def check_retest_entry(state, ltp, leg="CE"):
 
     token = CE_ID if leg == "CE" else PE_ID
-
-    
-
 
     if state["position"]:
         state["last_ltp"] = ltp
@@ -987,33 +982,100 @@ def check_retest_entry(state, ltp , leg = "CE"):
 
     ema = state["ema9"]
 
+    if ema is None:
+        state["last_ltp"] = ltp
+        return False
+
+    # ==========================================================
+    # EMA RETEST / CROSS
+    # ==========================================================
+
     crossed_up = previous < ema <= ltp
     crossed_down = previous > ema >= ltp
 
     if crossed_up or crossed_down:
 
-        state["position"] = True
-        state["waiting_retest"] = False
+        # ======================================================
+        # FIND NEXT FIBONACCI LEVEL
+        # ======================================================
 
-        state["entry_price"] = ltp
-
-        state["target"] = get_next_fibonacci_target(
+        next_level = get_next_fibonacci_target(
             state,
             ltp
         )
 
+        # No valid Fibonacci target
+        if next_level is None:
+            print(
+                f"❌ Entry rejected - No Fibonacci target "
+                f"above entry price {ltp:.2f}"
+            )
+
+            state["last_ltp"] = ltp
+            return False
+
+        # ======================================================
+        # 15 POINT MINIMUM DISTANCE FILTER
+        # ======================================================
+
+        distance_to_target = next_level - ltp
+
+        print(
+            f"\n========== ENTRY CHECK =========="
+        )
+        print(f"Entry Price      : {ltp:.2f}")
+        print(f"EMA              : {ema:.2f}")
+        print(f"Next Fib Level   : {next_level:.2f}")
+        print(f"Distance         : {distance_to_target:.2f}")
+        print(f"Required Minimum : 15.00")
+        print("=================================")
+
+        # ------------------------------------------------------
+        # Reject entry if next Fibonacci level is less than
+        # 15 points away from entry
+        # ------------------------------------------------------
+
+        if distance_to_target < 15:
+
+            print(
+                f"❌ ENTRY REJECTED "
+                f"| Distance {distance_to_target:.2f} < 15"
+            )
+
+            state["last_ltp"] = ltp
+
+            return False
+
+        # ======================================================
+        # ENTRY ALLOWED
+        # ======================================================
+
+        print(
+            f"✅ ENTRY ALLOWED "
+            f"| Distance {distance_to_target:.2f} >= 15"
+        )
+
+        state["position"] = True
+        state["waiting_retest"] = False
+
+        state["entry_price"] = ltp
+        state["target"] = next_level
+
         print("\n========== ENTRY ==========")
-        print(f"Price  : {ltp:.2f}")
-        print(f"EMA    : {ema:.2f}")
-        print(f"Target : {state['target']:.2f}")
+        print(f"Price    : {ltp:.2f}")
+        print(f"EMA      : {ema:.2f}")
+        print(f"Target   : {state['target']:.2f}")
+        print(f"Distance : {distance_to_target:.2f}")
         print("===========================\n")
-        print("token", token)
+
         state["last_ltp"] = ltp
 
-        
+        # ======================================================
+        # SEND ENTRY SIGNAL
+        # ======================================================
+
         deployments = get_today_deployments()
         users = group_users_by_broker(deployments)
-
 
         run_async(
             emit_signal(
@@ -1028,27 +1090,25 @@ def check_retest_entry(state, ltp , leg = "CE"):
                     str(telemetry["pnl"]),
                     state["lot"],
                     users,
-                    strike = ce_strike if leg == "CE" else pe_strike
-                    )
+                    strike=ce_strike if leg == "CE" else pe_strike
                 )
             )
+        )
 
-        log_trade_event(                
+        log_trade_event(
             event_type="ENTRY",
             leg_name=leg,
             token=token,
             symbol=SYMBOL,
             side="BUY",
             lot=1,
-            price=telemetry.get('ce_ltp') if leg == "CE" else telemetry.get('pe_ltp'), 
-            reason="FORCE EXIT MTM",
-            pnl= ce_state["pnl"],
+            price=telemetry.get('ce_ltp')
+                if leg == "CE"
+                else telemetry.get('pe_ltp'),
+            reason="EMA RETEST ENTRY",
+            pnl=state["pnl"],
             cum_pnl=str(telemetry["pnl"])
-            )
-
-        state["entry_price"] = ltp
-
-
+        )
 
         return True
 
