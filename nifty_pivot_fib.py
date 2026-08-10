@@ -42,7 +42,7 @@ EVENT_LOG_URL = "https://algoapi.dreamintraders.in/api/paperlogger/paperlogger"
 
 COMMON_ID = "3ff84201-7e4d-4e8d-8308-8241b1bca093"
 SYMBOL = "NIFTY"
-OPTION_SELECTION_LTP = 90
+OPTION_SELECTION_LTP = 130
 
 MARKET_OPEN = dtime(9, 15)
 MARKET_CLOSE = dtime(15, 14)
