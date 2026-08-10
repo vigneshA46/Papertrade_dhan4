@@ -478,7 +478,7 @@ def load_history(security_id, candle_count=10):
         instrument_type="OPTIDX",
         from_date=start_time.strftime("%Y-%m-%d %H:%M:%S"),
         to_date=end_time.strftime("%Y-%m-%d %H:%M:%S"),
-        interval=1
+        interval=5
     )
 
     raw = data.get("data", {})
@@ -663,7 +663,7 @@ def get_last_market_time():
     # After market closes
     return market_close
 
-def get_market_history_window(candle_count=10, interval=1):
+def get_market_history_window(candle_count=10, interval=5):
     """
     Returns the history window required
     to fetch the last completed market candles.
@@ -706,7 +706,7 @@ def get_previous_day_ohlc(security_id):
         instrument_type="OPTIDX",
         from_date=start.strftime("%Y-%m-%d %H:%M:%S"),
         to_date=end.strftime("%Y-%m-%d %H:%M:%S"),
-        interval=1
+        interval=5
     )
 
     if data.get("status") != "success":
