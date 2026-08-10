@@ -1273,8 +1273,8 @@ ce_state = init_state()
 pe_state = init_state()
 
 builders = {
-    CE_ID: OneMinuteCandleBuilder(),
-    PE_ID: OneMinuteCandleBuilder()
+    CE_ID: FiveMinuteCandleBuilder(),
+    PE_ID: FiveMinuteCandleBuilder()
 }
 
 
