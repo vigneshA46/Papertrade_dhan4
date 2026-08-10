@@ -464,7 +464,7 @@ def load_history(security_id, candle_count=10):
 
     start_time, end_time = get_market_history_window(
         candle_count=candle_count,
-        interval=1
+        interval=5
     )
 
     print("\n========== HISTORY WINDOW ==========")
@@ -1133,7 +1133,7 @@ def on_message(msg):
 
     candle = builder.process_tick(msg)
 
-        # =========================
+    # =========================
     # TELEMETRY (REAL-TIME PnL)
     # =========================
     ce_running = 0
