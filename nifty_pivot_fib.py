@@ -36,6 +36,8 @@ def trade_log_worker():
             trade_log_queue.task_done()
 
 
+
+
 ATM = None 
 TRADE_LOG_URL = "https://algoapi.dreamintraders.in/api/paperlogger/event"
 EVENT_LOG_URL = "https://algoapi.dreamintraders.in/api/paperlogger/paperlogger"
@@ -46,6 +48,13 @@ OPTION_SELECTION_LTP = 130
 
 MARKET_OPEN = dtime(9, 15)
 MARKET_CLOSE = dtime(15, 14)
+
+ENTRY_WINDOWS = [
+    (dtime(9, 15), dtime(10, 30)),
+    (dtime(11, 30), dtime(12, 0)),
+    (dtime(13, 0), dtime(15, 0)),
+]
+
 
 CE_ID = None
 PE_ID = None
@@ -460,7 +469,7 @@ def init_state():
         "last_ltp": None,
     }
 
-def load_history(security_id, candle_count=10):
+def load_history(security_id, candle_count=100):
 
     start_time, end_time = get_market_history_window(
         candle_count=candle_count,
@@ -962,6 +971,23 @@ def check_exit(state, ltp , leg = "CE"):
         return "SL"
 
     return None
+
+
+def is_entry_time_allowed():
+    """
+    Returns True only when the current IST time
+    is inside one of the allowed entry windows.
+    """
+
+    now = datetime.now(IST).time()
+
+    for start_time, end_time in ENTRY_WINDOWS:
+
+        if start_time <= now <= end_time:
+            return True
+
+    return False
+
 def check_retest_entry(state, ltp, leg="CE"):
 
     token = CE_ID if leg == "CE" else PE_ID
@@ -994,6 +1020,23 @@ def check_retest_entry(state, ltp, leg="CE"):
     crossed_down = previous > ema >= ltp
 
     if crossed_up or crossed_down:
+
+        # ======================================================
+        # ENTRY TIME FILTER
+        # ======================================================
+
+        if not is_entry_time_allowed():
+
+            now = datetime.now(IST).strftime("%H:%M:%S")
+
+            print(
+                f"❌ ENTRY REJECTED "
+                f"| Time {now} is outside allowed entry windows"
+            )
+
+            state["last_ltp"] = ltp
+
+            return False
 
         # ======================================================
         # FIND NEXT FIBONACCI LEVEL
@@ -1167,15 +1210,29 @@ def on_message(msg):
 
             print("\n========== CE 5 MIN CANDLE ==========")
             print(candle)
+            print("EMA9:", ce_state["ema9"])
             print("=====================================\n")
 
             ce_state["candles"] = load_history(
                 ce_security_id,
-                candle_count=10
+                candle_count=100
             )
 
+            ema_candles = ce_state["candles"][:-1]
+
+            print("\n========== CE EMA9 INPUT ==========")
+
+            for i, candle in enumerate(ema_candles):
+                print(
+                    f"{i + 1}. "
+                    f"{candle['datetime'].strftime('%d-%m-%Y %H:%M')} "
+                    f"| Close: {candle['close']}"
+                    )
+
+            print("===================================\n")
+
             ce_state["ema9"] = calculate_ema(
-                [c["close"] for c in ce_state["candles"]],
+                [c["close"] for c in ema_candles],
                 period=9
             )
 
@@ -1202,15 +1259,30 @@ def on_message(msg):
 
             print("\n========== PE 5 MIN CANDLE ==========")
             print(candle)
+            print("EMA9:", pe_state["ema9"])
             print("=====================================\n")
 
             pe_state["candles"] = load_history(
                 pe_security_id,
-                candle_count=10
+                candle_count=100
             )
 
+            
+            peema_candles = pe_state["candles"][:-1]
+
+            print("\n========== PE EMA9 INPUT ==========")
+
+            for i, candle in enumerate(peema_candles):
+                print(
+                    f"{i + 1}. "
+                    f"{candle['datetime'].strftime('%d-%m-%Y %H:%M')} "
+                    f"| Close: {candle['close']}"
+                )
+
+            print("===================================\n")
+
             pe_state["ema9"] = calculate_ema(
-                [c["close"] for c in pe_state["candles"]],
+                [c["close"] for c in peema_candles],
                 period=9
             )
 
@@ -1219,6 +1291,7 @@ def on_message(msg):
                 candle,
                 leg = "PE"
             )
+
 
 
 
@@ -1315,7 +1388,7 @@ print(mindata)
 
 ce_state["candles"] = load_history(
     ce_security_id,
-    candle_count=10
+    candle_count=100
 )
 
 print("\nCE Historical Candles\n")
@@ -1325,17 +1398,35 @@ for candle in ce_state["candles"]:
 
 pe_state["candles"] = load_history(
     pe_security_id,
-    candle_count=10
+    candle_count=100
 )
 
 print("\nPE Historical Candles\n")
 
-for candle in pe_state["candles"]:
-    print(candle)
+""" for candle in pe_state["candles"]:
+    print(candle) """
+
+
+ema_candles = ce_state["candles"][:-1]
+
+print("\n========== CE EMA9 INPUT ==========")
+
+for i, candle in enumerate(ema_candles):
+    print(
+        f"{i + 1}. "
+        f"{candle['datetime'].strftime('%d-%m-%Y %H:%M')} "
+        f"| Close: {candle['close']}"
+    )
+
+print("===================================\n")
 
 ce_state["ema9"] = calculate_ema(
-    [c["close"] for c in ce_state["candles"]],
+    [c["close"] for c in ema_candles],
     period=9
+)
+
+print(
+    f"CE EMA9 : {ce_state['ema9']:.2f}"
 )
 
 print("CE Fibonacci")
@@ -1345,9 +1436,26 @@ initialize_fibonacci_pivot(
     ce_security_id
 )
 
+peema_candles = pe_state["candles"][:-1]
+
+print("\n========== PE EMA9 INPUT ==========")
+
+for i, candle in enumerate(peema_candles):
+    print(
+        f"{i + 1}. "
+        f"{candle['datetime'].strftime('%d-%m-%Y %H:%M')} "
+        f"| Close: {candle['close']}"
+    )
+
+print("===================================\n")
+
 pe_state["ema9"] = calculate_ema(
-    [c["close"] for c in pe_state["candles"]],
+    [c["close"] for c in peema_candles],
     period=9
+)
+
+print(
+    f"PE EMA9 : {pe_state['ema9']:.2f}"
 )
 
 print("PE Fibonacci")
