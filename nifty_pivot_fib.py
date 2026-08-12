@@ -467,6 +467,11 @@ def init_state():
         "waiting_retest": False,
         "trend": None,
         "last_ltp": None,
+
+        "breakout_candle_close": None,
+        "breakout_fib_level": None,
+        "next_fib_level": None,
+        "entry_distance": None,
     }
 
 def load_history(security_id, candle_count=100):
@@ -853,10 +858,14 @@ def reset_trade_state(state):
     state["target"] = None
     state["stoploss"] = None
 
-def check_breakout(state, candle , leg = "CE"):
+    state["signal_candle"] = None
+    state["breakout_candle_close"] = None
+    state["breakout_fib_level"] = None
+    state["next_fib_level"] = None
+    state["entry_distance"] = None
 
 
-    token = CE_ID if leg == "CE" else PE_ID
+def check_breakout(state, candle, leg="CE"):
 
     if state["position"]:
         return
@@ -864,17 +873,135 @@ def check_breakout(state, candle , leg = "CE"):
     if state["waiting_retest"]:
         return
 
-    if candle["close"] > state["ema9"]:
+    ema = state["ema9"]
 
-        state["waiting_retest"] = True
-        state["signal_candle"] = candle
+    if ema is None:
+        return
+
+    close = candle["close"]
+
+    # ==========================================================
+    # CANDLE MUST CLOSE ABOVE EMA9
+    # ==========================================================
+
+    if close <= ema:
+        return
+
+    # ==========================================================
+    # FIND THE FIBONACCI LEVEL THAT THE BREAKOUT CANDLE
+    # CLOSED ABOVE
+    #
+    # P  -> R1
+    # R1 -> R2
+    # R2 -> R3
+    # R3 -> No next level
+    # ==========================================================
+
+    fib_levels = [
+        ("P", state["pivot"]),
+        ("R1", state["r1"]),
+        ("R2", state["r2"]),
+        ("R3", state["r3"]),
+    ]
+
+    breakout_level_name = None
+    breakout_level = None
+    next_level_name = None
+    next_level = None
+
+    for i, (name, level) in enumerate(fib_levels):
+
+        if level is None:
+            continue
+
+        if close > level:
+
+            breakout_level_name = name
+            breakout_level = level
+
+            # Find next Fibonacci level
+            if i + 1 < len(fib_levels):
+
+                next_name, next_value = fib_levels[i + 1]
+
+                if next_value is not None:
+                    next_level_name = next_name
+                    next_level = next_value
+
+    # ==========================================================
+    # CANDLE DID NOT BREAK ANY FIBONACCI LEVEL
+    # ==========================================================
+
+    if breakout_level is None:
 
         print(
-            f"\n✅ Breakout detected "
-            f"Close={candle['close']:.2f} "
-            f"EMA={state['ema9']:.2f}"
+            f"\n❌ No Fibonacci breakout"
+            f"\nClose : {close:.2f}"
+            f"\nEMA   : {ema:.2f}"
         )
-            
+
+        return
+
+    # ==========================================================
+    # R3 BROKEN -> NO NEXT LEVEL
+    # ==========================================================
+
+    if next_level is None:
+
+        print(
+            f"\n❌ Breakout above {breakout_level_name}"
+            f" but no next Fibonacci level exists."
+        )
+
+        return
+
+    # ==========================================================
+    # STORE BREAKOUT INFORMATION
+    # ==========================================================
+
+    state["waiting_retest"] = True
+
+    state["signal_candle"] = candle
+
+    state["breakout_candle_close"] = close
+
+    state["breakout_fib_level"] = breakout_level
+
+    state["next_fib_level"] = next_level
+
+    # ==========================================================
+    # DEBUG
+    # ==========================================================
+
+    print(
+        "\n========== FIB BREAKOUT =========="
+    )
+
+    print(
+        f"Close : {close:.2f}"
+    )
+
+    print(
+        f"EMA9 : {ema:.2f}"
+    )
+
+    print(
+        f"Breakout Fib : "
+        f"{breakout_level_name} = {breakout_level:.2f}"
+    )
+
+    print(
+        f"Next Fib Target : "
+        f"{next_level_name} = {next_level:.2f}"
+    )
+
+    print(
+        "Status : WAITING FOR RETEST"
+    )
+
+    print(
+        "==================================\n"
+    )
 
 
 def check_exit(state, ltp , leg = "CE"):
@@ -1039,29 +1166,37 @@ def check_retest_entry(state, ltp, leg="CE"):
             return False
 
         # ======================================================
-        # FIND NEXT FIBONACCI LEVEL
+        # USE THE NEXT FIBONACCI LEVEL FROM BREAKOUT CANDLE
         # ======================================================
 
-        next_level = get_next_fibonacci_target(
-            state,
-            ltp
-        )
+        next_level = state["next_fib_level"]
 
-        # No valid Fibonacci target
         if next_level is None:
+
             print(
-                f"❌ Entry rejected - No Fibonacci target "
-                f"above entry price {ltp:.2f}"
+                f"❌ Entry rejected - "
+                f"No next Fibonacci level stored"
             )
 
             state["last_ltp"] = ltp
             return False
+
+                # No valid Fibonacci target
+                if next_level is None:
+                    print(
+                        f"❌ Entry rejected - No Fibonacci target "
+                        f"above entry price {ltp:.2f}"
+                    )
+
+                    state["last_ltp"] = ltp
+                    return False
 
         # ======================================================
         # 15 POINT MINIMUM DISTANCE FILTER
         # ======================================================
 
         distance_to_target = next_level - ltp
+        state["entry_distance"] = distance_to_target
 
         print(
             f"\n========== ENTRY CHECK =========="
@@ -1103,6 +1238,7 @@ def check_retest_entry(state, ltp, leg="CE"):
 
         state["entry_price"] = ltp
         state["target"] = next_level
+        state["entry_distance"] = distance_to_target
 
         print("\n========== ENTRY ==========")
         print(f"Price    : {ltp:.2f}")
@@ -1303,7 +1439,6 @@ wait_for_start()
 
 threading.Thread(target=trade_log_worker, daemon=True).start()
 
-
 next_expiry = get_next_expiry()
 
 print("Next expiry:", next_expiry)
@@ -1313,7 +1448,6 @@ oc = dhan.option_chain(
     under_exchange_segment="IDX_I",
     expiry=str(next_expiry)
 )
-
 
 ce_strike, ce_security_id, pe_strike, pe_security_id = select_option_contracts(oc)
 
