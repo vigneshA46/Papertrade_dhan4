@@ -1181,16 +1181,6 @@ def check_retest_entry(state, ltp, leg="CE"):
             state["last_ltp"] = ltp
             return False
 
-                # No valid Fibonacci target
-                if next_level is None:
-                    print(
-                        f"❌ Entry rejected - No Fibonacci target "
-                        f"above entry price {ltp:.2f}"
-                    )
-
-                    state["last_ltp"] = ltp
-                    return False
-
         # ======================================================
         # 15 POINT MINIMUM DISTANCE FILTER
         # ======================================================
