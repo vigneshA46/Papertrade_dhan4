@@ -460,6 +460,7 @@ def init_state():
         "s3": None,
 
         # Strategy State
+        "entry_distance": None,
         "signal_state": "IDLE",      # IDLE -> WAITING_RETEST -> IN_POSITION
         "signal_candle": None,       # Candle which closed above EMA
         "target": None,              # Fibonacci target
@@ -470,8 +471,11 @@ def init_state():
 
         "breakout_candle_close": None,
         "breakout_fib_level": None,
+        "breakout_fib_name": None,
         "next_fib_level": None,
+        "next_fib_name": None,
         "entry_distance": None,
+
     }
 
 def load_history(security_id, candle_count=100):
@@ -792,6 +796,23 @@ def calculate_fibonacci_pivot(ohlc):
         "s3": pivot - rng,
     }
 
+def get_fibonacci_levels(state):
+    """
+    Returns Fibonacci levels from lowest to highest.
+
+    S3 < S2 < S1 < P < R1 < R2 < R3
+    """
+
+    return [
+        ("S3", state["s3"]),
+        ("S2", state["s2"]),
+        ("S1", state["s1"]),
+        ("P", state["pivot"]),
+        ("R1", state["r1"]),
+        ("R2", state["r2"]),
+        ("R3", state["r3"]),
+    ]
+
 def initialize_fibonacci_pivot(state, security_id):
 
     ohlc = get_previous_day_ohlc(security_id)
@@ -847,25 +868,131 @@ def get_next_fibonacci_target(state, entry_price):
     return state["r3"]
 
 def reset_trade_state(state):
-    """
-    Clears strategy state after exit.
-    """
+
+    # ==================================================
+    # POSITION
+    # ==================================================
 
     state["position"] = False
+
+    # ==================================================
+    # RESET SETUP
+    # ==================================================
+
+    state["signal_state"] = "IDLE"
+
     state["waiting_retest"] = False
 
+    state["signal_candle"] = None
+
+    state["breakout_candle_close"] = None
+
+    state["breakout_fib_level"] = None
+    state["breakout_fib_name"] = None
+
+    state["next_fib_level"] = None
+    state["next_fib_name"] = None
+
+    # ==================================================
+    # TRADE VALUES
+    # ==================================================
+
     state["entry_price"] = None
+    state["entry_time"] = None
+
     state["target"] = None
     state["stoploss"] = None
-
-    state["signal_candle"] = None
-    state["breakout_candle_close"] = None
-    state["breakout_fib_level"] = None
-    state["next_fib_level"] = None
     state["entry_distance"] = None
 
+    # ==================================================
+    # LAST TICK
+    # ==================================================
 
+    state["last_ltp"] = None
+
+    print("🔄 Trade/setup reset → IDLE")
+
+
+def get_breakout_and_next_fib(state, close):
+    """
+    Find:
+
+    1. The highest Fibonacci level below the candle close.
+    2. The immediate next Fibonacci level above it.
+
+    Example:
+
+        S3 = 40
+        S2 = 55
+        S1 = 70
+        P  = 85
+        R1 = 100
+
+        close = 78
+
+    Result:
+
+        breakout level = S1
+        next level     = P
+    """
+
+    fib_levels = get_fibonacci_levels(state)
+
+    breakout_index = None
+
+    for i, (name, level) in enumerate(fib_levels):
+
+        if level is None:
+            continue
+
+        if close > float(level):
+            breakout_index = i
+
+    # No Fibonacci level below candle close
+    if breakout_index is None:
+        return None, None, None, None
+
+    breakout_name, breakout_level = fib_levels[breakout_index]
+
+    # No level above it
+    if breakout_index + 1 >= len(fib_levels):
+        return None, None, None, None
+
+    next_name, next_level = fib_levels[breakout_index + 1]
+
+    if next_level is None:
+        return None, None, None, None
+
+    return (
+        breakout_name,
+        float(breakout_level),
+        next_name,
+        float(next_level),
+    )
 def check_breakout(state, candle, leg="CE"):
+    """
+    Runs ONLY when a 5-minute candle is completed.
+
+    A fresh setup is created only when:
+
+        1. State is IDLE
+        2. No position exists
+        3. Candle closes above EMA9
+
+    Then:
+
+        Find Fibonacci level below close
+        Find next Fibonacci level
+        Lock the setup
+        Wait for EMA retest
+    """
+
+    # ==================================================
+    # ONLY IDLE CAN CREATE A NEW SETUP
+    # ==================================================
+
+    if state["signal_state"] != "IDLE":
+        return
 
     if state["position"]:
         return
@@ -873,91 +1000,48 @@ def check_breakout(state, candle, leg="CE"):
     if state["waiting_retest"]:
         return
 
+    # ==================================================
+    # EMA CHECK
+    # ==================================================
+
     ema = state["ema9"]
 
     if ema is None:
         return
 
-    close = candle["close"]
+    close = float(candle["close"])
 
-    # ==========================================================
-    # CANDLE MUST CLOSE ABOVE EMA9
-    # ==========================================================
-
+    # Candle must CLOSE above EMA9
     if close <= ema:
         return
 
-    # ==========================================================
-    # FIND THE FIBONACCI LEVEL THAT THE BREAKOUT CANDLE
-    # CLOSED ABOVE
-    #
-    # P  -> R1
-    # R1 -> R2
-    # R2 -> R3
-    # R3 -> No next level
-    # ==========================================================
+    # ==================================================
+    # FIND FIBONACCI LEVELS
+    # ==================================================
 
-    fib_levels = [
-        ("P", state["pivot"]),
-        ("R1", state["r1"]),
-        ("R2", state["r2"]),
-        ("R3", state["r3"]),
-    ]
+    (
+        breakout_name,
+        breakout_level,
+        next_name,
+        next_level,
+    ) = get_breakout_and_next_fib(
+        state,
+        close
+    )
 
-    breakout_level_name = None
-    breakout_level = None
-    next_level_name = None
-    next_level = None
-
-    for i, (name, level) in enumerate(fib_levels):
-
-        if level is None:
-            continue
-
-        if close > level:
-
-            breakout_level_name = name
-            breakout_level = level
-
-            # Find next Fibonacci level
-            if i + 1 < len(fib_levels):
-
-                next_name, next_value = fib_levels[i + 1]
-
-                if next_value is not None:
-                    next_level_name = next_name
-                    next_level = next_value
-
-    # ==========================================================
-    # CANDLE DID NOT BREAK ANY FIBONACCI LEVEL
-    # ==========================================================
-
-    if breakout_level is None:
-
+    # No valid Fibonacci target
+    if breakout_level is None or next_level is None:
         print(
-            f"\n❌ No Fibonacci breakout"
-            f"\nClose : {close:.2f}"
-            f"\nEMA   : {ema:.2f}"
+            f"{leg}: No valid Fibonacci target "
+            f"for candle close {close:.2f}"
         )
-
         return
 
-    # ==========================================================
-    # R3 BROKEN -> NO NEXT LEVEL
-    # ==========================================================
+    # ==================================================
+    # CREATE NEW SETUP
+    # ==================================================
 
-    if next_level is None:
-
-        print(
-            f"\n❌ Breakout above {breakout_level_name}"
-            f" but no next Fibonacci level exists."
-        )
-
-        return
-
-    # ==========================================================
-    # STORE BREAKOUT INFORMATION
-    # ==========================================================
+    state["signal_state"] = "WAITING_RETEST"
 
     state["waiting_retest"] = True
 
@@ -965,43 +1049,48 @@ def check_breakout(state, candle, leg="CE"):
 
     state["breakout_candle_close"] = close
 
+    state["breakout_fib_name"] = breakout_name
     state["breakout_fib_level"] = breakout_level
 
+    state["next_fib_name"] = next_name
     state["next_fib_level"] = next_level
 
-    # ==========================================================
+    # ==================================================
     # DEBUG
-    # ==========================================================
+    # ==================================================
+
+    print()
+    print("======================================")
+    print(f"🚀 {leg} BREAKOUT DETECTED")
+    print("======================================")
 
     print(
-        "\n========== FIB BREAKOUT =========="
+        f"Candle Time : {candle['datetime']}"
     )
 
     print(
-        f"Close : {close:.2f}"
+        f"Close       : {close:.2f}"
     )
 
     print(
-        f"EMA9 : {ema:.2f}"
+        f"EMA9        : {ema:.2f}"
     )
 
     print(
-        f"Breakout Fib : "
-        f"{breakout_level_name} = {breakout_level:.2f}"
+        f"Breakout Fib: {breakout_name} = "
+        f"{breakout_level:.2f}"
     )
 
     print(
-        f"Next Fib Target : "
-        f"{next_level_name} = {next_level:.2f}"
+        f"Next Fib    : {next_name} = "
+        f"{next_level:.2f}"
     )
 
-    print(
-        "Status : WAITING FOR RETEST"
-    )
+    print("State       : WAITING_RETEST")
 
-    print(
-        "==================================\n"
-    )
+    print("======================================")
+    print()
+
 
 
 def check_exit(state, ltp , leg = "CE"):
@@ -1117,6 +1206,22 @@ def is_entry_time_allowed():
 
 def check_retest_entry(state, ltp, leg="CE"):
 
+    # ==================================================
+    # ONLY WAITING_RETEST CAN ENTER
+    # ==================================================
+
+    if state["signal_state"] != "WAITING_RETEST":
+        state["last_ltp"] = ltp
+        return False
+
+    if state["position"]:
+        state["last_ltp"] = ltp
+        return False
+
+    if not state["waiting_retest"]:
+        state["last_ltp"] = ltp
+        return False
+
     token = CE_ID if leg == "CE" else PE_ID
 
     if state["position"]:
@@ -1226,6 +1331,7 @@ def check_retest_entry(state, ltp, leg="CE"):
 
         state["position"] = True
         state["waiting_retest"] = False
+        state["signal_state"] = "IN_POSITION"
 
         state["entry_price"] = ltp
         state["target"] = next_level
