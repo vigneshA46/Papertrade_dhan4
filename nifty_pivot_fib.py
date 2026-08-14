@@ -1185,6 +1185,7 @@ def check_retest_entry(state, ltp, leg="CE"):
         # 15 POINT MINIMUM DISTANCE FILTER
         # ======================================================
 
+
         distance_to_target = next_level - ltp
         state["entry_distance"] = distance_to_target
 
