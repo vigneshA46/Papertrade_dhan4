@@ -55,7 +55,6 @@ ENTRY_WINDOWS = [
     (dtime(13, 0), dtime(15, 0)),
 ]
 
-
 CE_ID = None
 PE_ID = None
 
