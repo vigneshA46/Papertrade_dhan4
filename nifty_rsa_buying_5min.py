@@ -40,6 +40,12 @@ NSE_HOLIDAYS = {
 }
 
 
+# ==========================================================
+# TRADE LIMIT
+# ==========================================================
+
+MAX_TRADES_PER_DAY = 2
+trades_today = 0
 
 # =========================
 # CONFIG
@@ -938,6 +944,8 @@ def detect_ema_bearish_crossover(state):
         if bearish_cross:
 
             state["crossover_happened"] = False
+            state["signal_candle"] = None
+            state["waiting_for_breakout"] = False
 
             print("🔴 BEARISH EMA CROSSOVER DETECTED" , leg)
 
@@ -954,6 +962,9 @@ def init_state():
 
         "entry_price": None,
         "entry_time": None,
+
+        "stoploss": None,
+        "highest_price": None,
 
         "lot": 1,
         "pnl": 0.0,
@@ -1011,19 +1022,21 @@ def handle_leg(state, candle):
     if state["rsi14"] <= 50:
         return
 
-    # Save signal candle
-    state["signal_candle"] = {
-        "high": candle["high"],
-        "low": candle["low"],
-        "close": candle["close"],
-        "time": candle["timestamp"]
-    }
+    if state["signal_candle"] is None:
 
-    # Wait for breakout
-    state["waiting_for_breakout"] = True
+        # Save signal candle
+        state["signal_candle"] = {
+            "high": candle["high"],
+            "low": candle["low"],
+            "close": candle["close"],
+            "time": candle["timestamp"]
+        }
 
-    print("✅ Signal Candle Created")
-    print("Signal candle high:", state["signal_candle"]["high"])
+        # Wait for breakout
+        state["waiting_for_breakout"] = True
+
+        print("✅ Signal Candle Created")
+        print("Signal candle high:", state["signal_candle"]["high"])
 
 
 def manage_positions(state, ltp):
@@ -1034,7 +1047,7 @@ def manage_positions(state, ltp):
     2. Target Exit
     3. Stop Loss Exit
     """
-    global combined_pnl
+    global combined_pnl , trades_today , MAX_TRADES_PER_DAY
 
     # ==========================
     # ENTRY
@@ -1045,13 +1058,23 @@ def manage_positions(state, ltp):
         and state["rsi14"] >50
         and state["waiting_for_breakout"]
         and ltp >= state["signal_candle"]["high"] + 2
-    ):
+        and trades_today < MAX_TRADES_PER_DAY
+        ):
 
         entry_price = ltp
 
         # Store entry details
         state["position"] = True
         state["entry_price"] = entry_price
+
+        state["stoploss"] = entry_price - 20
+        state["highest_price"] = entry_price
+
+        trades_today += 1
+
+        print(
+            f"ENTRY COUNT: {trades_today}/{MAX_TRADES_PER_DAY}"
+        )
 
         # Reset signal
         state["waiting_for_breakout"] = False
@@ -1104,13 +1127,42 @@ def manage_positions(state, ltp):
 
         return
 
+    # ==========================
+    # PROFIT TRAILING
+    # ==========================
+
+    if state["position"]:
+
+        profit_points = ltp - state["entry_price"]
+
+        # Start trailing once profit reaches +17
+        if profit_points >= 17:
+
+            # Update highest price reached
+            if ltp > state["highest_price"]:
+                state["highest_price"] = ltp
+
+            # Keep SL 2 points below highest price
+            new_stoploss = state["highest_price"] - 2
+
+            # SL should only move UP, never down
+            if new_stoploss > state["stoploss"]:
+                state["stoploss"] = new_stoploss
+
+                print(
+                    f"{state['leg_name']} TRAILING SL MOVED TO "
+                    f"{state['stoploss']}"
+                )
+
+
 
     # ==========================
     # TARGET EXIT
     # ==========================
     if (
         state["position"]
-        and ltp >= state["entry_price"] + 20
+        and ltp <= state["stoploss"]
+
     ):
 
         exit_price = ltp
@@ -1174,6 +1226,9 @@ def manage_positions(state, ltp):
         # Reset position
         state["position"] = False
         state["entry_price"] = None
+
+        state["stoploss"] = None
+        state["highest_price"] = None
 
         return
 
@@ -1289,7 +1344,7 @@ def on_message(msg):
     # ==========================================================
 
     if token == CE_ID:
- 
+        
         telemetry["ce_ltp"] = ltp
         manage_positions(ce_state, ltp)
 
