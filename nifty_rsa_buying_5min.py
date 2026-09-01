@@ -1701,7 +1701,7 @@ TOKENS = [
 
 
 #TOKENS = [CE_ID , PE_ID]
-
+""" 
 def on_tick(token, msg):
 
     if token not in TOKENS:
@@ -1712,8 +1712,8 @@ def on_tick(token, msg):
 for t in TOKENS:
     subscribe(t, on_tick)
 
+ """
 
-""" 
 while True:
     try:
 
@@ -1728,4 +1728,3 @@ while True:
         print("WS ERROR:", e)
         feed.run_forever()
  
- """
