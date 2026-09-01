@@ -15,6 +15,8 @@ option_chain_manager.update_option_chain()
 print("Option Chain Updated")
 print("Option Chain:", option_chain_manager.get_option_chain())
 
+import nifty_rsa_buying_5min as strategy7
+
 
 #import paper_trade_niftyoption50_no_reentry as strategy1
 #import nifty_option_buying_cumulative_ltp as straegy16
@@ -31,6 +33,7 @@ print("Option Chain:", option_chain_manager.get_option_chain())
 #import delta_option_buying as strategy6
 #import paper_trade_niftyoption8_no_reentry as strategy8
 #import vwap_option_buying as strategy10
+
 
 
 ##################
