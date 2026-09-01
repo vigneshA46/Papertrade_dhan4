@@ -1698,6 +1698,22 @@ TOKENS = [
   str(ce_security_id) , str(pe_security_id)
 ]
 
+
+
+#TOKENS = [CE_ID , PE_ID]
+
+def on_tick(token, msg):
+
+    if token not in TOKENS:
+        return  
+
+    on_message(msg)
+
+for t in TOKENS:
+    subscribe(t, on_tick)
+
+
+""" 
 while True:
     try:
 
@@ -1712,3 +1728,4 @@ while True:
         print("WS ERROR:", e)
         feed.run_forever()
  
+ """

@@ -82,7 +82,7 @@ def get_access_token():
 
     response.raise_for_status()
     data = response.json()
-
+    print(data)
     token = data["accessToken"]
     expiry = datetime.fromisoformat(data["expiryTime"])
 
