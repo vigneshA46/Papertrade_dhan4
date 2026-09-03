@@ -1048,6 +1048,7 @@ def manage_positions(state, ltp):
     3. Stop Loss Exit
     """
     global combined_pnl , trades_today , MAX_TRADES_PER_DAY
+    now = datetime.now(IST).time()
 
     name = "CE" if state == ce_state else "PE"
     token = CE_ID if state == ce_state else PE_ID
