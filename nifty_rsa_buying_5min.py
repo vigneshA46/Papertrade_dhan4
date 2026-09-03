@@ -1049,6 +1049,54 @@ def manage_positions(state, ltp):
     """
     global combined_pnl , trades_today , MAX_TRADES_PER_DAY
 
+    name = "CE" if state == ce_state else "PE"
+    token = CE_ID if state == ce_state else PE_ID
+
+    # =========================
+    # TIME EXIT (15:20)
+    # =========================
+    if now >= TRADE_END:
+        telemetry["status"] = 'CLOSED'
+
+        if state["position"]:
+            exit_price = ltp
+
+            pnl = (exit_price - state["entry_price"]) * 65
+
+            state["pnl"] += pnl
+            combined_pnl += pnl
+
+            deployments = get_today_deployments()
+
+            users = group_users_by_broker(deployments)
+
+            print("FORMATTED USERS:", users)
+
+
+            run_async(emit_signal(build_payload(name, "SELL", token , "exit","EXIT", ltp, pnl,combined_pnl,state["lot"],users , state["strike"])))
+            log_trade_event(
+                
+                event_type="EXIT",
+                leg_name=name,
+                token=token,
+                symbol=SYMBOL,
+                side="SELL",
+                lot=state["lot"],
+                price=exit_price,
+                reason="TIME EXIT",
+                pnl= state["pnl"],
+                cum_pnl=combined_pnl
+                )
+
+            state["position"] = False
+
+
+        state["trading_disabled"] = True
+        return
+
+    if state["trading_disabled"]:
+        return
+
     # ==========================
     # ENTRY
     # ==========================
@@ -1169,7 +1217,7 @@ def manage_positions(state, ltp):
 
         pnl = (
             (exit_price - state["entry_price"])
-            * LOTSIZE
+            * 65
             * state["lot"]
         )
 
@@ -1245,7 +1293,7 @@ def manage_positions(state, ltp):
 
         pnl = (
             (exit_price - state["entry_price"])
-            * LOTSIZE
+            * 65
             * state["lot"]
         )
 
@@ -1306,14 +1354,17 @@ def manage_positions(state, ltp):
 
 def on_message(msg):
 
-    global telemetry, ce_state, pe_state
+    global telemetry, ce_state, pe_state , CE_ID, PE_ID, combined_pnl
 
     if msg.get("type") != "Quote Data":
         return
 
+    now = datetime.now(IST).time()
 
     token = str(msg["security_id"])
     ltp = float(msg.get("LTP", 0))
+
+    state = ce_state if token == CE_ID else pe_state
 
     builder = builders.get(token)
 
@@ -1337,6 +1388,9 @@ def on_message(msg):
     telemetry["ce_pnl"] = ce_state["pnl"] + ce_running
     telemetry["pe_pnl"] = pe_state["pnl"] + pe_running
     telemetry["pnl"] = telemetry["ce_pnl"] + telemetry["pe_pnl"]
+
+
+
 
 
     # ==========================================================
